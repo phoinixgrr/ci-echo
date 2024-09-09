@@ -1,0 +1,48 @@
+{{- range .Values.deployments }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  labels:
+    app: {{ .name }}
+spec:
+  replicas: {{ .replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - "-listen=:8080"
+            - "-text={{ .responseText }}"
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: "/"
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: "/"
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+{{- end }}

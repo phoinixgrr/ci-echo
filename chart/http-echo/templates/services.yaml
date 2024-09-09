@@ -1,0 +1,16 @@
+{{- range .Values.deployments }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  labels:
+    app: {{ .name }}
+spec:
+  type: {{ .service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .service.port | default 80 }}
+      targetPort: 8080
+  selector:
+    app: {{ .name }}
+{{- end }}

@@ -1,0 +1,27 @@
+
+# Global ingress settings
+ingress:
+  enabled: false
+  annotations: {}
+
+# List of http-echo deployments
+deployments: []
+ # Example:
+  # - name: foo
+  #   responseText: "foo"
+  #   replicaCount: 3
+  #   image:
+  #     repository: hashicorp/http-echo
+  #     tag: latest
+  #   service:
+  #     type: ClusterIP
+  #     port: 80
+  #   ingress:
+  #     host: foo.localhost
+  #   resources:
+  #     limits:
+  #       cpu: 500m
+  #       memory: 256Mi
+  #     requests:
+  #       cpu: 100m
+  #       memory: 128Mi

@@ -1,0 +1,8 @@
+
+apiVersion: v2
+name: http-echo
+description: A Helm chart installing multiple http-echo deployments
+maintainers:
+  - name: phoinixgr
+type: application
+version: 0.0.1
