@@ -1,0 +1,11 @@
+# General
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+~
+
+# Helm
+Chart.lock
+*.tgz
