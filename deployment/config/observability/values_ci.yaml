@@ -1,0 +1,12 @@
+# Holds kube-prometheus-stack configuration
+grafana:
+  imageRenderer:
+    enabled: true
+    env:
+      # Workaround for imageRenderer running under github-actions
+      # rationale https://github.com/puppeteer/puppeteer/issues/11023#issuecomment-1898513454
+      XDG_CONFIG_HOME: /tmp/.chromium
+      XDG_CACHE_HOME: /tmp/.chromium
+
+alertmanager:
+  enabled: false

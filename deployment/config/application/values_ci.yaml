@@ -1,0 +1,44 @@
+# Holds http-echo application configuration
+
+# Global ingress settings
+ingress:
+  enabled: true
+
+# List of http-echo deployments
+deployments:
+  - name: foo
+    responseText: "foo"
+    replicaCount: 2
+    image:
+      repository: hashicorp/http-echo
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 80
+    ingress:
+      host: foo.localhost
+    resources:
+      limits:
+        cpu: 1
+        memory: 256Mi
+      requests:
+        cpu: 200m
+        memory: 20Mi
+  - name: bar
+    responseText: "bar"
+    replicaCount: 2
+    image:
+      repository: hashicorp/http-echo
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 80
+    ingress:
+      host: bar.localhost
+    resources:
+      limits:
+        cpu: 1
+        memory: 256Mi
+      requests:
+        cpu: 200m
+        memory: 20Mi
