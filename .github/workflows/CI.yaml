@@ -1,0 +1,209 @@
+name: CI Load Test
+
+on:
+  pull_request:
+    paths:
+      - 'chart/**'
+      - 'deployment/**'
+      - '.github/workflows/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+  pull-requests: write  # Add write permission for pull requests
+
+env:
+  # Load-testing Configuration
+  LOAD_TEST_DURATION: 5m
+  LOAD_TEST_CONCURRENCY: 20
+
+  # Grafana-image-renderer process Configuration
+  GRAFANA_DASHBOARD_ID: 85a562078cdf77779eaa1add43ccec1e
+  GRAFANA_DASHBOARD_NAME: kubernetes-compute-resources-namespace-pods
+  CPU_PANEL_ID: 5
+  MEMORY_PANEL_ID: 7
+
+  # General Configuration
+  NAMESPACE: http-echo
+  NAMESPACE_MONITORING: monitoring
+  NAMESPACE_INGRESS: ingress-nginx
+
+jobs:
+  load-testing:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-url-screenshots: ${{ steps.upload_screenshot_artifacts.outputs.artifact-url }}
+    steps:
+      # 1. Checkout the repository
+      - name: Checkout the code
+        uses: actions/checkout@v4
+
+      # 2. Setup Helm
+      - name: Setup Helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: v3.7.1
+
+      # 3. Set up Kubernetes cluster with Kind
+      - name: Set up Kubernetes cluster with Kind
+        uses: helm/kind-action@v1.10.0
+        with:
+          version: v0.24.0
+          config: ./deployment/config/infrastracture/kind_config_ci.yaml
+
+      # 4. Install NGINX Ingress Controller
+      - name: Install NGINX Ingress Controller
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace $NAMESPACE_INGRESS \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=90s
+
+      # 5. Install Prometheus and Grafana using Helm
+      - name: Install Prometheus and Grafana
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          helm install prometheus prometheus-community/kube-prometheus-stack \
+            --values ./deployment/config/observability/values_ci.yaml \
+            --namespace $NAMESPACE_MONITORING \
+            --create-namespace \
+            --wait
+
+      # 6. Install HTTP Echo applications[foo,bar] using Helm
+      - name: Install HTTP Echo Applications
+        run: |
+          helm install http-echos ./chart/http-echo \
+            --values ./deployment/config/application/values_ci.yaml \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --wait
+
+      # 7. Install Bats and run tests
+      - name: Install Bats
+        uses: bats-core/bats-action@2.0.0
+        with:
+          support-path: ${{ github.workspace }}/test/bats-support
+          assert-path: ${{ github.workspace }}/test/bats-assert
+          detik-path: ${{ github.workspace }}/test/bats-detik
+          file-path: ${{ github.workspace }}/test/bats-file
+
+      - name: Run tests
+        run: bats ./tests
+
+      # 8. Install hey benchmarking tool
+      - name: Install hey benchmarking tool
+        run: |
+          curl -L https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64 -o hey
+          chmod +x hey
+          sudo mv hey /usr/local/bin/hey
+
+      # 9. Run Load Testing in Parallel
+      - name: Run Load Testing in Parallel
+        run: |
+          # Giving prometheus time to start processing metrics
+          sleep 60
+
+          hey -z ${{ env.LOAD_TEST_DURATION }} -c ${{ env.LOAD_TEST_CONCURRENCY }} http://foo.localhost > foo_results.txt &
+          hey -z ${{ env.LOAD_TEST_DURATION }} -c ${{ env.LOAD_TEST_CONCURRENCY }} http://bar.localhost > bar_results.txt &
+          wait
+
+      # 10. Upload Load Test Results as Artifacts
+      - name: Upload Load Test Results
+        uses: actions/upload-artifact@v4
+        id: upload_load_test_artifacts
+        with:
+          name: load-test-results
+          path: |
+            foo_results.txt
+            bar_results.txt
+
+      # 11. Get Grafana API Key
+      - name: Get Grafana API Key
+        run: |
+          # Fetching the Grafana admin password
+          GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+          echo "GRAFANA_PASSWORD=$GRAFANA_PASSWORD" >> $GITHUB_ENV
+
+          # Forwarding Grafana service port to localhost
+          kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80 &
+          sleep 1
+
+          # Requesting an API key from Grafana
+          curl -X POST http://admin:${GRAFANA_PASSWORD}@localhost:3000/api/auth/keys \
+            -H "Content-Type: application/json" \
+            --data '{"name":"grafana-api-key", "role": "Admin"}' \
+            > grafana_api_key.json
+          GRAFANA_API_KEY=$(jq -r .key grafana_api_key.json)
+          echo "GRAFANA_API_KEY=$GRAFANA_API_KEY" >> $GITHUB_ENV
+
+      # 12. Generate Grafana Screenshots for CPU and MEM Usage
+      - name: Generate Grafana Screenshots
+        run: |
+          # Giving prometheus time to ingest the metrics
+          sleep 100
+
+          mkdir screenshots
+          # Generate CPU utilization screenshot
+          curl -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+            "http://localhost:3000/render/d-solo/${{ env.GRAFANA_DASHBOARD_ID }}/${{ env.GRAFANA_DASHBOARD_NAME }}?orgId=1&refresh=10s&var-datasource=default&var-cluster=&var-namespace=${{ env.NAMESPACE }}&from=now-10m&to=now&panelId=${{ env.CPU_PANEL_ID }}&width=1000&height=500&scale=1" \
+            -o screenshots/cpu_utilization.png
+
+          # Generate Memory utilization screenshot
+          curl -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+            "http://localhost:3000/render/d-solo/${{ env.GRAFANA_DASHBOARD_ID }}/${{ env.GRAFANA_DASHBOARD_NAME }}?orgId=1&refresh=10s&var-datasource=default&var-cluster=&var-namespace=${{ env.NAMESPACE }}&from=now-10m&to=now&panelId=${{ env.MEMORY_PANEL_ID }}&width=1000&height=500&scale=1" \
+            -o screenshots/memory_utilization.png
+
+      # 13. Upload CPU/MEM screenshots as artifacts
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v4
+        id: upload_screenshot_artifacts
+        with:
+          name: load-test-cpu-mem-screenshots
+          path: screenshots/*.png
+
+  post-comment:
+    runs-on: ubuntu-latest
+    needs: load-testing
+    steps:
+      # 1. Checkout the repository
+      - name: Checkout the code
+        uses: actions/checkout@v4
+
+      # 2. Download the load test results
+      - name: Download Load Test Results
+        uses: actions/download-artifact@v4
+        with:
+          name: load-test-results
+
+      # 3. Post comment with load test results and screenshots
+      - name: Post load test results as comment on PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FOO_RESULTS=$(cat foo_results.txt)
+          BAR_RESULTS=$(cat bar_results.txt)
+
+          COMMENT=$(cat <<EOF
+          ## 📊 **Load Test Results** 📊
+          ### **Foo Deployment**
+          \`\`\`plaintext
+          $(echo "${FOO_RESULTS}")
+          \`\`\`
+          ---
+          ### **Bar Deployment**
+          \`\`\`plaintext
+          $(echo "${BAR_RESULTS}")
+          \`\`\`
+          ---
+          Resource Utilisation Screenshots (CPU/MEM), can be downloaded [here](${{needs.load-testing.outputs.artifact-url-screenshots}}) 🚀
+
+          ### Summary:
+          - **Response Times**: Includes Slowest, Fastest, and Average for both deployments.
+          - **Requests per Second**: How many requests were processed per second.
+          - **Status Codes**: Breakdown of status codes, including [503] errors or successes.
+          EOF
+          )
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
