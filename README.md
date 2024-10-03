@@ -137,16 +137,3 @@ To contribute:
 3. Make your changes.
 4. Open a PR.
 
-## Time Spent
-
-- **3-4 hours**: Setting up the pipeline and Helm chart, testing, and running load tests.
-- **4 hours**: Debugging Grafana rendering and handling `grafana-image-renderer` issues. This involved troubleshooting [various issues](https://github.com/puppeteer/puppeteer/issues/11023#issuecomment-1898513454) encountered when running under GitHub Actions.
-- **1 hour**: Writing documentation.
-
-## Possible Enhancements
-
-- **Check out the option of using Grafana k6 for load testing**: It provides more flexibility and control over load tests. Javascript based.
-- **Improve failure handling**: Introduce better and more robust validation steps.
-- **Better commit structuring**: Partition the work into smaller, logical commits.
-- **Optimize the CI pipeline**: Reduce execution time.
-- **Containerize Development**: Utilize Docker to create a reproducible development environment. [Nektos/ACT](https://github.com/nektos/act) can be used to leverage this.
