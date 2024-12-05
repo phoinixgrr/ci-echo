@@ -8,7 +8,7 @@ ingress:
 deployments:
   - name: foo
     responseText: "foo"
-    replicaCount: 2
+    replicaCount: 3
     image:
       repository: hashicorp/http-echo
       tag: latest
@@ -20,13 +20,13 @@ deployments:
     resources:
       limits:
         cpu: 1
-        memory: 256Mi
+        memory: 356Mi
       requests:
-        cpu: 200m
-        memory: 20Mi
+        cpu: 300m
+        memory: 30Mi
   - name: bar
     responseText: "bar"
-    replicaCount: 2
+    replicaCount: 3
     image:
       repository: hashicorp/http-echo
       tag: latest
@@ -38,7 +38,7 @@ deployments:
     resources:
       limits:
         cpu: 1
-        memory: 256Mi
+        memory: 356Mi
       requests:
-        cpu: 200m
-        memory: 20Mi
+        cpu: 300m
+        memory: 30Mi
