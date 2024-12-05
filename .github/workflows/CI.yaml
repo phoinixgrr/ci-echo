@@ -10,7 +10,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write  # Add write permission for pull requests
+  pull-requests: write # Add write permission for pull requests
 
 env:
   # Load-testing Configuration
